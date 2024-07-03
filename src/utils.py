@@ -3,7 +3,7 @@ import psycopg2
 import time
 
 
-def get_employers(url, text, area=113, page=0, per_page=100):
+def get_employers(url: str, text: str, area=113, page=0, per_page=100) -> list[dict]:
     """ Получение списка работодателей по ключевым словам с помощью API hh.ru """
     employers = []
     for word in text:
@@ -21,7 +21,7 @@ def get_employers(url, text, area=113, page=0, per_page=100):
     return employers
 
 
-def get_vacancies(url, employer_id, area=113, page=0, per_page=50):
+def get_vacancies(url: str, employer_id: int, area=113, page=0, per_page=50) -> list[dict]:
     """ Получение списка вакансий по id работодателя с помощью API hh.ru """
     vacancies = []
     # for employer_id in emp_id:
@@ -45,16 +45,19 @@ def create_database(db_name: str, params: dict) -> None:
     cur = conn.cursor()
     conn.autocommit = True
 
-    cur.execute(f"DROP DATABASE IF EXISTS {db_name}")
-    cur.execute(f"CREATE DATABASE {db_name}")
-
-    cur.close()
-    conn.close()
+    try:
+        cur.execute(f"CREATE DATABASE {db_name}")
+        conn.commit()
+    except psycopg2.errors.DuplicateDatabase:
+        return 'Error creating database: база данных уже существует'
+    finally:
+        cur.close()
+        conn.close()
 
     conn = psycopg2.connect(database=db_name, **params)
 
     with conn.cursor() as cur:
-        cur.execute("CREATE TABLE employers ("
+        cur.execute("CREATE TABLE IF NOT EXISTS employers ("
                     # "id serial PRIMARY KEY ,"
                     "employer_id integer PRIMARY KEY,"
                     "company_name varchar,"
@@ -63,13 +66,13 @@ def create_database(db_name: str, params: dict) -> None:
                     "url varchar)")
 
     with conn.cursor() as cur:
-        cur.execute("CREATE TABLE vacancies ("
+        cur.execute("CREATE TABLE IF NOT EXISTS vacancies ("
                     # "id serial PRIMARY KEY,"
                     "vacancy_id integer PRIMARY KEY,"
                     "vacancy_name varchar,"
                     "salary_from integer DEFAULT 0,"
-                    "salary_to integer DEFAULT 0,"                    
-                    "currency varchar,"                    
+                    "salary_to integer DEFAULT 0,"
+                    "currency varchar,"
                     "published_at date,"
                     "city varchar,"
                     "employer_id integer,"
@@ -79,25 +82,24 @@ def create_database(db_name: str, params: dict) -> None:
     conn.close()
 
 
-def save_data_to_employers(data: list[dict], db_name: str, params: dict):
+def save_data_to_employers(data: list[dict], db_name: str, params: dict) -> None:
     """ Сохранение данных о работодателях и вакансиях в базу данных """
     conn = psycopg2.connect(database=db_name, **params)
 
     with conn.cursor() as cur:
-        # cur.execute("TRUNCATE TABLE vacancies")
-        # cur.execute("TRUNCATE TABLE employers")
-
         for employer in data:
             cur.execute(
                 "INSERT INTO employers (employer_id, company_name, open_vacancies, url) VALUES (%s, %s, %s, %s) "
-                "ON CONFLICT (employer_id) DO UPDATE SET company_name = EXCLUDED.company_name, url = EXCLUDED.url",
-                (employer.get('id'), employer.get('name'), employer.get('open_vacancies'), employer.get('alternate_url')))
+                "ON CONFLICT (employer_id) DO UPDATE SET company_name = EXCLUDED.company_name, "
+                "open_vacancies = EXCLUDED.open_vacancies, url = EXCLUDED.url",
+                (employer.get('id'), employer.get('name'), employer.get('open_vacancies'),
+                 employer.get('alternate_url')))
 
     conn.commit()
     conn.close()
 
 
-def save_data_to_vacancies(data: list[dict], db_name: str, params: dict):
+def save_data_to_vacancies(data: list[dict], db_name: str, params: dict) -> None:
     """ Сохранение данных о работодателях и вакансиях в базу данных """
     conn = psycopg2.connect(database=db_name, **params)
 
@@ -129,7 +131,10 @@ def save_data_to_vacancies(data: list[dict], db_name: str, params: dict):
                         "(vacancy_id, vacancy_name, salary_from, salary_to, currency, "
                         "published_at, city, employer_id, url) "
                         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (vacancy_id) "
-                        "DO UPDATE SET vacancy_name = EXCLUDED.vacancy_name, url = EXCLUDED.url",
+                        "DO UPDATE SET vacancy_name = EXCLUDED.vacancy_name, "
+                        "salary_from = EXCLUDED.salary_from, salary_to = EXCLUDED.salary_to,"
+                        "published_at = EXCLUDED.published_at, city = EXCLUDED.city,"
+                        "url = EXCLUDED.url",
                         (vacancy.get('id'), vacancy.get('name'), salary_from, salary_to,
                          currency, vacancy.get('published_at'), vac_city.get('name'),
                          employer.get('id'), vacancy.get('alternate_url')))
