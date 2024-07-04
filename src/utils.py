@@ -3,7 +3,7 @@ import psycopg2
 import time
 
 
-def get_employers(url: str, text: str, area=113, page=0, per_page=100) -> list[dict]:
+def get_employers(url: str, text, area=113, page=0, per_page=100) -> list[dict]:
     """ Получение списка работодателей по ключевым словам с помощью API hh.ru """
     employers = []
     for word in text:
@@ -21,10 +21,9 @@ def get_employers(url: str, text: str, area=113, page=0, per_page=100) -> list[d
     return employers
 
 
-def get_vacancies(url: str, employer_id: int, area=113, page=0, per_page=50) -> list[dict]:
+def get_vacancies(url: str, employer_id, area=113, page=0, per_page=50) -> list[dict]:
     """ Получение списка вакансий по id работодателя с помощью API hh.ru """
     vacancies = []
-    # for employer_id in emp_id:
     params = {'employer_id': employer_id, 'area': area, 'page': page, 'per_page': per_page}
     while True:
         response = requests.get(url, params=params)
@@ -40,7 +39,7 @@ def get_vacancies(url: str, employer_id: int, area=113, page=0, per_page=50) -> 
 
 
 def create_database(db_name: str, params: dict) -> None:
-    """ Создание базы данных и таблиц в ней """
+    """ Создание базы данных с таблицами 'employers' и 'vacancies' """
     conn = psycopg2.connect(database='postgres', **params)
     cur = conn.cursor()
     conn.autocommit = True
@@ -48,8 +47,9 @@ def create_database(db_name: str, params: dict) -> None:
     try:
         cur.execute(f"CREATE DATABASE {db_name}")
         conn.commit()
+        print(f"База данных '{db_name}' создана")
     except psycopg2.errors.DuplicateDatabase:
-        return 'Error creating database: база данных уже существует'
+        print('База данных уже существует')
     finally:
         cur.close()
         conn.close()
@@ -58,16 +58,13 @@ def create_database(db_name: str, params: dict) -> None:
 
     with conn.cursor() as cur:
         cur.execute("CREATE TABLE IF NOT EXISTS employers ("
-                    # "id serial PRIMARY KEY ,"
                     "employer_id integer PRIMARY KEY,"
                     "company_name varchar,"
                     "open_vacancies integer,"
-                    # "city varchar,"
                     "url varchar)")
 
     with conn.cursor() as cur:
         cur.execute("CREATE TABLE IF NOT EXISTS vacancies ("
-                    # "id serial PRIMARY KEY,"
                     "vacancy_id integer PRIMARY KEY,"
                     "vacancy_name varchar,"
                     "salary_from integer DEFAULT 0,"
@@ -104,9 +101,6 @@ def save_data_to_vacancies(data: list[dict], db_name: str, params: dict) -> None
     conn = psycopg2.connect(database=db_name, **params)
 
     with conn.cursor() as cur:
-        # cur.execute("TRUNCATE TABLE vacancies")
-        # cur.execute("TRUNCATE TABLE employers")
-
         salary_from = 0
         salary_to = 0
         currency = None
